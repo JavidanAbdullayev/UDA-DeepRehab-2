@@ -1,0 +1,4 @@
+,run,test_subject_id,acc,bal_acc,f1_score,auroc
+0,4,['R1'],0.3333,0.2444,0.2429,0.5068
+1,mean,-,0.3333,0.2444,0.2429,0.5068
+2,std,-,nan,nan,nan,nan

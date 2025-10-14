@@ -1,0 +1,4 @@
+,run,test_subject_id,src_risk,few_shot_risk,trg_risk
+0,2,[ 1 10],16.5561,0,16.5561
+1,mean,-,16.5561,0.0000,16.5561
+2,std,-,nan,nan,nan
