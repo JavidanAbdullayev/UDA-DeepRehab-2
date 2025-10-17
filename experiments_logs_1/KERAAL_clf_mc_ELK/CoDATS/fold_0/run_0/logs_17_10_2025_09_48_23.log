@@ -1,0 +1,81 @@
+=============================================
+Dataset: KERAAL_clf_mc_ELK
+Method:  CoDATS
+=============================================
+Run ID: 0
+=============================================
+[Epoch : 1/15]
+Total_loss	: 1.2755
+Domain_loss	: 1.3892
+Src_cls_loss	: 1.2755
+-------------------------------------
+[Epoch : 2/15]
+Total_loss	: 1.2528
+Domain_loss	: 1.3904
+Src_cls_loss	: 1.2528
+-------------------------------------
+[Epoch : 3/15]
+Total_loss	: 1.2414
+Domain_loss	: 1.3915
+Src_cls_loss	: 1.2414
+-------------------------------------
+[Epoch : 4/15]
+Total_loss	: 1.2396
+Domain_loss	: 1.3918
+Src_cls_loss	: 1.2396
+-------------------------------------
+[Epoch : 5/15]
+Total_loss	: 1.2337
+Domain_loss	: 1.3922
+Src_cls_loss	: 1.2337
+-------------------------------------
+[Epoch : 6/15]
+Total_loss	: 1.2318
+Domain_loss	: 1.3920
+Src_cls_loss	: 1.2318
+-------------------------------------
+[Epoch : 7/15]
+Total_loss	: 1.2234
+Domain_loss	: 1.3920
+Src_cls_loss	: 1.2234
+-------------------------------------
+[Epoch : 8/15]
+Total_loss	: 1.2190
+Domain_loss	: 1.3919
+Src_cls_loss	: 1.2190
+-------------------------------------
+[Epoch : 9/15]
+Total_loss	: 1.2136
+Domain_loss	: 1.3920
+Src_cls_loss	: 1.2136
+-------------------------------------
+[Epoch : 10/15]
+Total_loss	: 1.2075
+Domain_loss	: 1.3922
+Src_cls_loss	: 1.2075
+-------------------------------------
+[Epoch : 11/15]
+Total_loss	: 1.2020
+Domain_loss	: 1.3922
+Src_cls_loss	: 1.2020
+-------------------------------------
+[Epoch : 12/15]
+Total_loss	: 1.1962
+Domain_loss	: 1.3922
+Src_cls_loss	: 1.1962
+-------------------------------------
+[Epoch : 13/15]
+Total_loss	: 1.1893
+Domain_loss	: 1.3921
+Src_cls_loss	: 1.1893
+-------------------------------------
+[Epoch : 14/15]
+Total_loss	: 1.1831
+Domain_loss	: 1.3919
+Src_cls_loss	: 1.1831
+-------------------------------------
+[Epoch : 15/15]
+Total_loss	: 1.1757
+Domain_loss	: 1.3919
+Src_cls_loss	: 1.1757
+-------------------------------------

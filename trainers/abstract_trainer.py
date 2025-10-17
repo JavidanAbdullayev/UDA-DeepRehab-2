@@ -116,9 +116,10 @@ class AbstractTrainer(object):
 
     def load_checkpoint(self, model_dir):
         checkpoint = torch.load(os.path.join(self.home_path, model_dir, 'checkpoint.pt'))
+        first_model = checkpoint['first']
         last_model = checkpoint['last']
         best_model = checkpoint['best']
-        return last_model, best_model
+        return first_model, last_model, best_model
 
     def train_model(self):
         # Get the algorithm and the backbone network
@@ -143,7 +144,7 @@ class AbstractTrainer(object):
         total_loss, preds_list, labels_list = [], [], []
 
         with torch.no_grad():
-            for data, labels in test_loader:
+            for data, labels, _ in test_loader:
                 data = data.float().to(self.device)
                 labels = labels.view((-1)).long().to(self.device)
 
@@ -213,30 +214,6 @@ class AbstractTrainer(object):
         return (X_tr, y_tr, subj_tr), (X_te, y_te, subj_te)
 
     def load_data(self, fold_number=0, test_subject_id=None):
-        """Load the chosen classification dataset.
-
-        Parameters
-        ----------
-        dataset_name: str
-            The name of the classification dataset chosen to load.
-        root_path: str
-            The directory containing all datasets.
-        fold_number: int
-            The fold number.
-
-        Returns
-        -------
-        xtrain: np.ndarray
-            The training sequences of shape (n_cases, n_channels, n_timepoints).
-        ytrain: np.ndarray
-            The labels of the training samples of shape (n_cases,).
-        xtest: np.ndarray
-            The testing sequences of shape (n_cases, n_channels, n_timepoints).
-        ytest: np.ndarray
-            The labels of the testing samples of shape (n_cases,).
-        dataset_info: dict
-            The dataset information in dictionary format.
-        """
         dataset_path = os.path.join(self.data_path, "fold" + str(fold_number))
 
         with open(os.path.join(self.data_path, "info.json")) as f:
@@ -307,12 +284,28 @@ class AbstractTrainer(object):
         print(f"ytest shape: {ytest.shape}")
         print(f"s_test shape: {s_test.shape}")                
 
-        train_ds = dataset_class(xtrain, np.reshape(ytrain, (len(ytrain),)))        
-        test_ds = dataset_class(xtest, np.reshape(ytest, (len(ytest),)))
+        le2 = LabelEncoder()
+
+        # ensure string dtype, fit on BOTH splits to keep mapping consistent
+        s_all = np.concatenate([s_train.astype(str), s_test.astype(str)])
+        s_all_enc = le2.fit_transform(s_all).astype(np.int64)
+
+        s_train = s_all_enc[:len(s_train)]
+        s_test  = s_all_enc[len(s_train):]
+
+        print(f's_train: {s_train}\n')
+        print(f's_test: {s_test}')
+        print(f'Unique values from s_train: {np.unique(s_train)}')
+
+        # s_train = s_train.astype(np.int64)
+        # s_test = s_test.astype(np.int64)
+        
+        train_ds = dataset_class(xtrain, np.reshape(ytrain, (len(ytrain),)), np.reshape(s_train, (len(s_train),)) )        
+        test_ds = dataset_class(xtest, np.reshape(ytest, (len(ytest),)), np.reshape(s_test, (len(s_test),)))
         
         
-        self.train_dl = DataLoader(train_ds, batch_size=self.hparams['batch_size'],  shuffle=True,  drop_last=True,  pin_memory=True)
-        self.test_dl =  DataLoader(test_ds,  batch_size=self.hparams['batch_size'],  shuffle=True,  drop_last=True,  pin_memory=True)
+        self.train_dl = DataLoader(train_ds, batch_size=self.hparams['batch_size'],  shuffle=True,  drop_last=False,  pin_memory=True)
+        self.test_dl =  DataLoader(test_ds,  batch_size=self.hparams['batch_size'],  shuffle=False,  drop_last=False,  pin_memory=True)
 
         self.input_channels = xtrain.shape[1]
         self.num_classes = np.unique(ytrain)
@@ -356,8 +349,9 @@ class AbstractTrainer(object):
         table_results.to_csv(os.path.join(self.exp_log_dir, f"fold_{fold_id}", f"run_{run_id}", f"{name}.csv"))
 
 
-    def save_checkpoint(self, home_path, log_dir, last_model, best_model):
+    def save_checkpoint(self, home_path, log_dir, first_model, last_model, best_model):
         save_dict = {
+            "first": first_model,
             "last": last_model,
             "best": best_model
         }

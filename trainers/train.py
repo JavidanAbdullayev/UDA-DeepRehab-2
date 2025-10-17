@@ -31,8 +31,8 @@ class Trainer(AbstractTrainer):
 
         self.results_columns = ["run", "test_subject_id",  "acc",       "bal_acc",        "f1_score",   "auroc"]
         self.risks_columns =   ["run", "test_subject_id",  "src_risk",  "few_shot_risk",  "trg_risk"]
-
-
+   
+            
     def fit(self):
 
         # table with metrics
@@ -62,50 +62,25 @@ class Trainer(AbstractTrainer):
                 self.initialize_algorithm()                
 
                 # Load checkpint
-                # print('')
                 # pretrained_model_log_dir = os.path.join('experiments_logs_NO_ADAPT/', self.dataset, "NO_ADAPT", "fold_" + str(fold_id), "run_" + str(run_id))
-                # _, best_chk = self.load_checkpoint(pretrained_model_log_dir)
-                # print('best_chk: ', best_chk.keys())
+                # last_chk, best_chk = self.load_checkpoint(pretrained_model_log_dir)
+                # self.algorithm.network.load_state_dict(best_chk)                
+                
+                # # print('best_chk: ', best_chk.keys())
                 # bb_std = OrderedDict()
                 # for k, v in best_chk.items():
                 #     if k.startswith("0."):
                 #         bb_std[k[len("0."):]] = v  # drop the "0." prefix
 
-                # self.algorithm.network[0].load_state_dict(bb_std, strict=False)
-
-
-
-                # Load checkpoint
-                print('')
-                pretrained_model_log_dir = os.path.join('experiments_logs_NO_ADAPT/', self.dataset, "NO_ADAPT", "fold_" + str(fold_id), "run_" + str(run_id))
-                _, best_chk = self.load_checkpoint(pretrained_model_log_dir)
-
-                print('Checkpoint keys:', best_chk.keys())
-                print('\nModel keys:', self.algorithm.network[0].state_dict().keys())
-
-                # Process keys
-                bb_std = OrderedDict()
-                for k, v in best_chk.items():
-                    if k.startswith("0."):
-                        new_key = k[len("0."):]
-                        bb_std[new_key] = v
-                        print(f"Mapping: {k} -> {new_key}")  # Debug print
-
-                print('\nProcessed keys:', bb_std.keys())
-
-                # Try loading with strict=False to see what's missing/unexpected
-                result = self.algorithm.network[0].load_state_dict(bb_std, strict=False)
-                print('\nMissing keys:', result.missing_keys)
-                print('Unexpected keys:', result.unexpected_keys)
-
-
-
+                # self.algorithm.network[0].load_state_dict(bb_std)
+                
                 print('\n\n Trainig will start now!!! \n\n')
                 # Train the domain adaptation algorithm
-                self.last_model, self.best_model = self.algorithm.update(self.train_dl, self.test_dl, self.loss_avg_meters, self.logger)
+                self.first_model, self.last_model, self.best_model, src_train_losses, trg_val_losses, src_train_accs, trg_val_accs = \
+                                                                    self.algorithm.update(self.train_dl, self.test_dl, self.loss_avg_meters, self.logger)
 
                 # Save checkpoint
-                self.save_checkpoint(self.home_path, self.scenario_log_dir, self.last_model, self.best_model)
+                self.save_checkpoint(self.home_path, self.scenario_log_dir, self.first_model, self.last_model, self.best_model)
 
                 # !!!!!!!!!!!!!!!!!!!!!! Load the best model for the evaluation !!!!!!!!!!!!!!!!!!!!!!                                           
                 self.algorithm.network.load_state_dict(self.best_model)
@@ -129,6 +104,40 @@ class Trainer(AbstractTrainer):
 
                 table_results = pd.DataFrame(columns=self.results_columns)
                 table_risks = pd.DataFrame(columns=self.risks_columns)
+
+
+                # SAVE LOGS
+                
+                epochs = range(1, len(src_train_losses) + 1)
+                import matplotlib.pyplot as plt
+                plt.figure(figsize=(9, 4))
+                plt.plot(epochs, src_train_losses, label="source train loss")
+                plt.plot(epochs, trg_val_losses, label="target test loss")                
+                plt.xlabel("Epoch")
+                plt.ylabel("Value")  # change to "Loss" or "Accuracy" as appropriate
+                plt.title("Losses over epochs")
+                plt.grid(True, alpha=0.3)
+                plt.legend()
+                plt.tight_layout()
+                plt.show()
+                plt.savefig(os.path.join(self.exp_log_dir, f"fold_{fold_id}", f"run_{run_id}", "losses.pdf"))
+
+
+
+                epochs = range(1, len(src_train_losses) + 1)
+                import matplotlib.pyplot as plt
+                plt.figure(figsize=(9, 4))
+                plt.plot(epochs, src_train_accs, label="source train accuracy")
+                plt.plot(epochs, trg_val_accs, label="target test accuracy")                
+                plt.xlabel("Epoch")
+                plt.ylabel("Value")  # change to "Loss" or "Accuracy" as appropriate
+                plt.title("Accuracies over epochs")
+                plt.grid(True, alpha=0.3)
+                plt.legend()
+                plt.tight_layout()
+                plt.show()
+                plt.savefig(os.path.join(self.exp_log_dir, f"fold_{fold_id}", f"run_{run_id}", "accuracies.pdf"))
+
 
     def test(self):
         # Results dataframes

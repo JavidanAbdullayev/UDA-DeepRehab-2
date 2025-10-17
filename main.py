@@ -65,8 +65,8 @@ if __name__ == "__main__":
                    
                     # 'UCDHE_clf_bn_MP', 'UCDHE_clf_bn_Rowing', 'UCDHE_clf_mc_MP', 'UCDHE_clf_mc_Rowing'  
                     
+                    'KERAAL_clf_mc_ELK'
                     
-                    'KERAAL_clf_mc_ELK',
                     ]
 
 

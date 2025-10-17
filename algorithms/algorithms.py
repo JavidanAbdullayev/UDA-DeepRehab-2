@@ -33,7 +33,7 @@ class Algorithm(torch.nn.Module):
     def __init__(self, configs, backbone):
         super(Algorithm, self).__init__()
         self.configs = configs
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Add this
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 
         self.cross_entropy = nn.CrossEntropyLoss()
         self.feature_extractor = backbone(configs)
@@ -41,24 +41,38 @@ class Algorithm(torch.nn.Module):
         self.network = nn.Sequential(self.feature_extractor, self.classifier)
 
         # Move metrics to device
-        self.ACC = Accuracy(task="multiclass", num_classes=4).to(self.device)
-        self.F1 = F1Score(task="multiclass", num_classes=4, average="macro").to(self.device)
-        self.AUROC = AUROC(task="multiclass", num_classes=4).to(self.device)
+        
+        # self.ACC = Accuracy(task="multiclass", num_classes=4).to(self.device)
+        # self.F1 = F1Score(task="multiclass", num_classes=4, average="macro").to(self.device)
+        # self.AUROC = AUROC(task="multiclass", num_classes=4).to(self.device)
         
         
     # update function is common to all algorithms
     def update(self, src_loader, trg_loader, avg_meter, logger):
+        
         # defining best and last model
         best_src_risk = float('inf')
         best_model = None
+        
 
+        src_train_losses, trg_val_losses = [], []
+        src_train_accs, trg_val_accs = [], []
+        
         for epoch in range(1, self.hparams["num_epochs"] + 1):
-            res = self.calculate_metrics(trg_loader)
-            print(f'Evaluation results: {res}')
+            if epoch == 1:
+                first_model = deepcopy(self.network.state_dict())
 
+            self.feature_extractor.train()
+            self.classifier.train()
+                
             # training loop 
             self.training_epoch(src_loader, trg_loader, avg_meter, epoch)
-
+            src_train_losses.append(avg_meter['Src_cls_loss'].val)
+            
+            src_train_accs.append(self.calculate_metrics(src_loader)[1])            
+            trg_val_accs.append(self.calculate_metrics(trg_loader)[1])
+            
+                
             # saving the best model based on src risk
             if (epoch + 1) % 10 == 0 and avg_meter['Src_cls_loss'].avg < best_src_risk:
                 best_src_risk = avg_meter['Src_cls_loss'].avg
@@ -70,16 +84,19 @@ class Algorithm(torch.nn.Module):
                 logger.debug(f'{key}\t: {val.avg:2.4f}')
             logger.debug(f'-------------------------------------')
 
+            # Evaluation
+            test_metrics = self.calculate_metrics(trg_loader)            
+            trg_val_losses.append(test_metrics[-1])
+            
+            
         last_model = self.network.state_dict()
 
-        return last_model, best_model
+        return first_model, last_model, best_model, src_train_losses, trg_val_losses, src_train_accs, trg_val_accs
     
     # train loop vary from one method to another
     def training_epoch(self, *args, **kwargs):
         raise NotImplementedError      
-
-    
-    
+        
     def evaluate(self, test_loader):
         feature_extractor = self.feature_extractor.to(self.device)
         classifier = self.classifier.to(self.device)
@@ -90,7 +107,7 @@ class Algorithm(torch.nn.Module):
         total_loss, preds_list, labels_list = [], [], []
 
         with torch.no_grad():
-            for data, labels in test_loader:
+            for data, labels, _ in test_loader:
                 data = data.float().to(self.device)
                 labels = labels.view((-1)).long().to(self.device)
 
@@ -111,9 +128,12 @@ class Algorithm(torch.nn.Module):
         self.full_preds = torch.cat((preds_list))
         self.full_labels = torch.cat((labels_list))
 
-
     def calculate_metrics(self, dataloader):
     
+        self.ACC.reset()
+        self.F1.reset()
+        self.AUROC.reset()
+
         # Move metrics to the same device as the model
         self.ACC = self.ACC.to(self.device)
         self.F1 = self.F1.to(self.device)
@@ -139,7 +159,7 @@ class Algorithm(torch.nn.Module):
         # auroc 
         auroc = self.AUROC(self.full_preds, labels_device).item()
         
-        return acc, bal_acc, f1, auroc
+        return acc, bal_acc, f1, auroc, self.loss
     
     
 class NO_ADAPT(Algorithm):
@@ -159,6 +179,9 @@ class NO_ADAPT(Algorithm):
         self.device = device
 
     def training_epoch(self,src_loader, trg_loader, avg_meter, epoch):
+        self.feature_extractor.train()
+        self.classifier.train()
+        
         for src_x, src_y in src_loader:
             
             src_x, src_y = src_x.to(self.device), src_y.to(self.device)
@@ -237,66 +260,83 @@ class CoDATS(Algorithm):
     def __init__(self, backbone, configs, hparams, device):
         super().__init__(configs, backbone)
 
-        # we replace the original classifier with codats the classifier
-        # remember to use same name of self.classifier, as we use it for the model evaluation
-        self.classifier = codats_classifier(configs)
-        self.network = nn.Sequential(self.feature_extractor, self.classifier)
-
-        # optimizer and scheduler
-        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=1e-4, weight_decay=1e-4)        
-        
-        # self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=0.5, patience=50, min_lr=1e-4)
-        
         # hparams
         self.hparams = hparams
         # device
         self.device = device
 
         # Domain classifier
-        self.domain_classifier = Discriminator(configs)
-
+        self.domain_classifier = Discriminator(configs) 
+        
+        # Optimizer and scheduler
+        self.optimizer = torch.optim.Adam(
+            self.network.parameters(), 
+        )                
+        
         self.optimizer_disc = torch.optim.Adam(
-                self.domain_classifier.parameters(),
-                lr=hparams["learning_rate"],
-                weight_decay=hparams["weight_decay"], betas=(0.5, 0.99)
-            )        
+            self.domain_classifier.parameters(),
+            lr=hparams['learning_rate'],
+            weight_decay=hparams["weight_decay"], betas=(0.5, 0.99)
+        )       
+        
+        self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, 
+            factor=0.5,
+            patience=50, 
+            min_lr=1e-4
+        )
+        
+
 
     def training_epoch(self, src_loader, trg_loader, avg_meter, epoch):
-
+        """ Training loop for one epoch"""
+        self.feature_extractor.train()
+        self.classifier.train()
+        self.domain_classifier.train()
+        
+        
         # Construct Joint Loaders 
         joint_loader = enumerate(zip(src_loader, itertools.cycle(trg_loader)))
         num_batches = max(len(src_loader), len(trg_loader))
         
-        for step, ((src_x, src_y, ), (trg_x, _, )) in joint_loader:            
+        epoch_src_cls_loss = 0.0
+        
+        for step, ((src_x, src_y, _), (trg_x, _, )) in joint_loader:            
             src_x, src_y, trg_x = src_x.to(self.device), src_y.to(self.device), trg_x.to(self.device)           # extract source features
-            bs_src = src_x.size(0)
-            bs_trg = trg_x.size(0)
             
-            p = float(step + epoch * num_batches) / self.hparams["num_epochs"] + 1 / num_batches
-            alpha = 2. / (1. + np.exp(-10 * p)) - 1
-
+            # Calculate global step for proper alpha scheduling across epochs
+            global_step = step + (epoch - 1) * num_batches
+            total_steps = self.hparams["num_epochs"] * num_batches
+            
+            # Gradual adaptation schedule
+            p = min(1.0, global_step / (0.7 * total_steps))
+            alpha = 2. / (1. + np.exp(-5 * p)) - 1
+            
             # zero grad
             self.optimizer.zero_grad()
             self.optimizer_disc.zero_grad()
 
+            # Create domain labels (1 for source, 0 for target)
             domain_label_src = torch.ones(len(src_x)).to(self.device)
             domain_label_trg = torch.zeros(len(trg_x)).to(self.device)
 
+            # Forward pass - source
             src_feat = self.feature_extractor(src_x)
             src_pred = self.classifier(src_feat)
 
+            # Forward pass - target
             trg_feat = self.feature_extractor(trg_x)
 
             # Task classification  Loss
-            src_cls_loss = self.cross_entropy(src_pred.squeeze(), src_y)
+            src_cls_loss = self.cross_entropy(src_pred, src_y)
 
-            # Domain classification loss
-            # source
+            # Domain classification loss with gradient reversal
+            # Source domain loss
             src_feat_reversed = ReverseLayerF.apply(src_feat, alpha)
             src_domain_pred = self.domain_classifier(src_feat_reversed)
             src_domain_loss = self.cross_entropy(src_domain_pred, domain_label_src.long())
 
-            # target
+            # Target domain loss
             trg_feat_reversed = ReverseLayerF.apply(trg_feat, alpha)
             trg_domain_pred = self.domain_classifier(trg_feat_reversed)
             trg_domain_loss = self.cross_entropy(trg_domain_pred, domain_label_trg.long())
@@ -304,19 +344,32 @@ class CoDATS(Algorithm):
             # Total domain loss
             domain_loss = src_domain_loss + trg_domain_loss
 
-            # loss = self.hparams["src_cls_loss_wt"] * src_cls_loss +  self.hparams["domain_loss_wt"] * domain_loss
+            # Total loss
             loss = src_cls_loss + domain_loss
             
-
+            # Backward pass
             loss.backward()
             self.optimizer.step()
             self.optimizer_disc.step()
+            
+            # Track losses
+            epoch_src_cls_loss += src_cls_loss.item()
 
-            losses =  {'Total_loss': loss.item(), 'Domain_loss': domain_loss.item(), 'Src_cls_loss': src_cls_loss.item()}            
+            losses =  {
+                       'Total_loss': loss.item(), 
+                       'Domain_loss': domain_loss.item(), 
+                       'Src_cls_loss': src_cls_loss.item()
+                       }    
+                    
             for key, val in losses.items():
-                avg_meter[key].update(val, bs_src)
+                avg_meter[key].update(val, src_x.size(0))
 
-        # self.lr_scheduler.step(src_cls_loss)
+        avg_epoch_loss = epoch_src_cls_loss / num_batches
+        self.lr_scheduler.step(avg_epoch_loss)
+        print('alpha: ', alpha)
+                        
+                        
+                        
                         
 class DANN(Algorithm):
     """

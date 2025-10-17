@@ -124,9 +124,12 @@ def few_shot_data_generator(data_loader, dataset_configs, num_samples=5):
     return few_shot_loader
 
 class dataset_class(Dataset):
-    def __init__(self, xtrain, ytrain, dtype=torch.float32, transform=None):
+    def __init__(self, xtrain, ytrain, strain, dtype=torch.float32, transform=None):
         self.X = torch.from_numpy(xtrain).float()
         self.y = torch.from_numpy(ytrain).long()
+        self.s = torch.from_numpy(strain).long()
+        # self.s = strain
+        
         self.dtype = dtype
         self.transform = transform
         
@@ -136,8 +139,10 @@ class dataset_class(Dataset):
     def __getitem__(self, i):
         x = torch.tensor(self.X[i], dtype=self.dtype)
         y = int(self.y[i])
+        s = int(self.s[i])
         
-        return x, y #, s # (samples, class_label, subject_id)
+        
+        return x, y, s # (samples, class_label, subject_id)
     
 
 

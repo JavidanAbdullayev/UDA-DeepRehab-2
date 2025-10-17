@@ -10,7 +10,7 @@ class RehabPile():
     def __init__(self):
         super(RehabPile, self).__init__()
         self.train_params = {
-            'num_epochs': 500,
+            'num_epochs': 1500,
             'batch_size': 4,
             'weight_decay': 1e-4,
             'step_size': 50,
